@@ -1,4 +1,6 @@
 /* BRUTALIST EDITORIAL — SIEBE PEETERS */
+const activeCommentUnsubscribers = new Set();
+
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -34,6 +36,8 @@
     if (!t) return;
     trans.classList.add('in');
     setTimeout(() => {
+      activeCommentUnsubscribers.forEach(unsubscribe => unsubscribe());
+      activeCommentUnsubscribers.clear();
       app.innerHTML = '';
       app.appendChild(t.content.cloneNode(true));
       document.title = titles[h] || titles['/'];
@@ -56,6 +60,8 @@
   addEventListener('hashchange', route);
 
   function bind() {
+    initPostComments();
+
     const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); } }), { threshold: .15 });
     $$('.rev').forEach(el => io.observe(el));
 
@@ -113,6 +119,171 @@
 
   function init() { route(); }
 })();
+
+function createCommentElement(comment) {
+  const item = document.createElement('li');
+  item.className = 'post-comment';
+
+  const avatar = document.createElement('span');
+  const name = comment.username.trim();
+  const emoticons = ['(=^.^=)', '(=^o^=)', '(=^-^=)', '(=^_^=)', '(=^w^=)', "(='.'=)", '(^._.^)', '(=^x^=)'];
+  const nameHash = [...name.toLowerCase()].reduce((hash, char) => hash + char.charCodeAt(0), 0);
+  const colorIndex = nameHash % 6;
+  avatar.className = `comment-avatar avatar-tone-${colorIndex}`;
+  avatar.textContent = emoticons[nameHash % emoticons.length];
+  avatar.setAttribute('aria-hidden', 'true');
+
+  const body = document.createElement('div');
+  body.className = 'post-comment-body';
+  const header = document.createElement('header');
+  const username = document.createElement('strong');
+  username.textContent = comment.username;
+  const date = document.createElement('time');
+  if (comment.createdAt) {
+    date.dateTime = comment.createdAt;
+    date.textContent = new Intl.DateTimeFormat('nl-BE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(comment.createdAt));
+  } else {
+    date.textContent = 'NU';
+  }
+  const text = document.createElement('p');
+  text.textContent = comment.text;
+
+  header.append(username, date);
+  body.append(header, text);
+  item.append(avatar, body);
+  return item;
+}
+
+function renderPostComments(section, comments) {
+  const list = section.querySelector('.post-comments-list');
+  const count = section.querySelector('.post-comments-count');
+  const status = section.querySelector('.post-comments-status');
+  list.replaceChildren(...comments.map(createCommentElement));
+  if (comments.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'post-comments-empty';
+    empty.textContent = 'Nog geen reacties. Wees de eerste!';
+    list.append(empty);
+  }
+  count.textContent = `(${comments.length})`;
+  status.textContent = '';
+  status.setAttribute('role', 'status');
+}
+
+function initPostComments() {
+  document.querySelectorAll('.stage-week-report').forEach((post, index) => {
+    const story = post.querySelector('.week-story');
+    const content = post.querySelector('.acc-inner');
+    if (!story || !content || content.querySelector('.post-comments')) return;
+
+    const section = document.createElement('section');
+    section.className = 'post-comments';
+    section.dataset.postId = post.id;
+    section.setAttribute('aria-labelledby', `post-comments-title-${index}`);
+
+    const heading = document.createElement('header');
+    const label = document.createElement('span');
+    label.textContent = '[ GESPREK / REACTIES ]';
+    const title = document.createElement('h3');
+    title.id = `post-comments-title-${index}`;
+    title.append('REACTIES ');
+    const count = document.createElement('i');
+    count.className = 'post-comments-count';
+    count.textContent = '(0)';
+    title.append(count);
+    heading.append(label, title);
+
+    const note = document.createElement('p');
+    note.className = 'post-comments-note';
+    note.textContent = 'Reacties zijn openbaar. Alleen de eigenaar kan ze verwijderen.';
+
+    const list = document.createElement('ol');
+    list.className = 'post-comments-list';
+    list.setAttribute('aria-label', 'Reacties bij dit blogbericht');
+
+    const form = document.createElement('form');
+    form.className = 'post-comment-form';
+    const nameLabel = document.createElement('label');
+    const nameInput = document.createElement('input');
+    nameInput.name = 'username';
+    nameInput.type = 'text';
+    nameInput.required = true;
+    nameInput.maxLength = 40;
+    nameInput.autocomplete = 'nickname';
+    nameInput.placeholder = 'Je naam';
+    nameInput.id = `post-comment-name-${index}`;
+    nameLabel.htmlFor = nameInput.id;
+    nameLabel.textContent = 'GEBRUIKERSNAAM';
+
+    const textLabel = document.createElement('label');
+    const textInput = document.createElement('textarea');
+    textInput.name = 'text';
+    textInput.required = true;
+    textInput.maxLength = 1000;
+    textInput.rows = 4;
+    textInput.placeholder = 'Schrijf een reactie...';
+    textInput.id = `post-comment-text-${index}`;
+    textLabel.htmlFor = textInput.id;
+    textLabel.textContent = 'JE REACTIE';
+
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.className = 'post-comment-submit';
+    submit.textContent = 'REACTIE PLAATSEN ↗';
+    const status = document.createElement('p');
+    status.className = 'post-comments-status';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+
+    form.append(nameLabel, nameInput, textLabel, textInput, submit, status);
+    section.append(heading, note, list, form);
+    content.append(section);
+    section.querySelector('.post-comments-status').textContent = 'Reacties laden...';
+    Promise.resolve(window.postCommentsReady).then(api => {
+      if (!section.isConnected) return;
+      activeCommentUnsubscribers.add(api.subscribe(
+        section.dataset.postId,
+        comments => renderPostComments(section, comments),
+        error => {
+          const status = section.querySelector('.post-comments-status');
+          status.textContent = `Reacties konden niet worden geladen: ${error.message}`;
+          status.setAttribute('role', 'alert');
+        }
+      ));
+    }).catch(error => {
+      const status = section.querySelector('.post-comments-status');
+      status.textContent = `Reactieservice niet beschikbaar: ${error.message}`;
+      status.setAttribute('role', 'alert');
+    });
+  });
+}
+
+document.addEventListener('submit', event => {
+  const form = event.target.closest('.post-comment-form');
+  if (!form) return;
+  event.preventDefault();
+
+  const section = form.closest('.post-comments');
+  const username = form.elements.username.value.trim();
+  const text = form.elements.text.value.trim();
+  const status = section.querySelector('.post-comments-status');
+  status.setAttribute('role', 'status');
+
+  if (!username || !text) {
+    status.textContent = 'Vul je gebruikersnaam en reactie in.';
+    return;
+  }
+
+  const submit = form.querySelector('.post-comment-submit');
+  submit.disabled = true;
+  Promise.resolve(window.postCommentsReady).then(api => api.add(section.dataset.postId, username, text)).then(() => {
+    form.reset();
+    status.textContent = 'Je reactie is geplaatst.';
+  }).catch(error => {
+    status.textContent = `Je reactie kon niet worden opgeslagen: ${error.message}`;
+    status.setAttribute('role', 'alert');
+  }).finally(() => { submit.disabled = false; });
+});
 
 // WPL TABS
 document.addEventListener('click', e => {

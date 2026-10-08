@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isValidPostId(postId) {
+      return postId is string && postId.matches('^wpl[12]-week-0[1-7]$');
+    }
+
+    match /comments/{commentId} {
+      allow get, list: if isValidPostId(resource.data.postId);
+
+      allow create: if request.resource.data.keys().hasAll([
+          'postId',
+          'username',
+          'text',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'postId',
+          'username',
+          'text',
+          'createdAt'
+        ])
+        && isValidPostId(request.resource.data.postId)
+        && request.resource.data.username is string
+        && request.resource.data.username.size() > 0
+        && request.resource.data.username.size() <= 40
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+  }
+}
