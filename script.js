@@ -2,6 +2,135 @@
 const activeCommentUnsubscribers = new Set();
 
 (() => {
+  const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+  let keyProgress = 0;
+  let konamiTimer;
+
+  document.addEventListener('keydown', event => {
+    const target = event.target;
+    if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) return;
+
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (key === konamiCode[keyProgress]) {
+      keyProgress += 1;
+    } else {
+      keyProgress = key === konamiCode[0] ? 1 : 0;
+    }
+
+    if (keyProgress !== konamiCode.length) return;
+    keyProgress = 0;
+    document.body.classList.add('konami-mode');
+    clearTimeout(konamiTimer);
+    showEasterEggMessage('KONAMI CODE // COLOR SHIFT');
+    konamiTimer = setTimeout(() => document.body.classList.remove('konami-mode'), 10000);
+  });
+
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.comment-avatar')) return;
+    startCatMode();
+  });
+
+  document.addEventListener('emilia-comment', openEmiliaVideo);
+  document.addEventListener('click', event => {
+    const closeButton = event.target.closest('[data-close-video]');
+    const dialog = document.querySelector('.emilia-video-overlay');
+    if (!dialog) return;
+    if (closeButton || event.target === dialog) closeEmiliaVideo(dialog);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      const dialog = document.querySelector('.emilia-video-overlay');
+      if (dialog) closeEmiliaVideo(dialog);
+    }
+  });
+
+  function openEmiliaVideo() {
+    document.querySelector('.emilia-video-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'emilia-video-overlay';
+    overlay.setAttribute('role', 'presentation');
+
+    const dialog = document.createElement('section');
+    dialog.className = 'emilia-video-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'emilia-video-title');
+
+    const header = document.createElement('header');
+    const title = document.createElement('h2');
+    title.id = 'emilia-video-title';
+    title.textContent = 'SPECIALE GAST GESPOT';
+    const close = document.createElement('button');
+    close.className = 'emilia-video-close';
+    close.type = 'button';
+    close.dataset.closeVideo = '';
+    close.setAttribute('aria-label', 'Sluit video');
+    close.textContent = '×';
+    header.append(title, close);
+
+    const frame = document.createElement('iframe');
+    frame.src = 'https://www.youtube-nocookie.com/embed/yzIzRe0RJSk?autoplay=1&rel=0';
+    frame.title = 'YouTube-video voor Emilia';
+    frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+    frame.allowFullscreen = true;
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+
+    const fallbackLink = document.createElement('a');
+    fallbackLink.className = 'emilia-video-link';
+    fallbackLink.href = 'https://www.youtube.com/shorts/yzIzRe0RJSk';
+    fallbackLink.target = '_blank';
+    fallbackLink.rel = 'noopener noreferrer';
+    fallbackLink.textContent = 'Problemen met afspelen? Bekijk de video op YouTube ↗';
+
+    dialog.append(header, frame, fallbackLink);
+    overlay.append(dialog);
+    document.body.append(overlay);
+    close.focus();
+  }
+
+  function closeEmiliaVideo(overlay) {
+    overlay.remove();
+  }
+
+  function showEasterEggMessage(message) {
+    let toast = document.querySelector('.easter-egg-message');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'easter-egg-message';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
+      document.body.append(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('visible');
+    clearTimeout(toast.hideTimer);
+    toast.hideTimer = setTimeout(() => toast.classList.remove('visible'), 2600);
+  }
+
+  function startCatMode() {
+    document.querySelector('.cat-mode-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'cat-mode-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    const cats = ['=^..^=', '=^.^=', '=^o.o^=', '=^_^=', '=^w^='];
+
+    cats.forEach((cat, index) => {
+      const runner = document.createElement('span');
+      runner.className = 'ascii-cat-runner';
+      runner.textContent = cat;
+      runner.style.top = `${12 + index * 16}%`;
+      runner.style.animationDelay = `${index * 0.16}s`;
+      overlay.append(runner);
+    });
+
+    document.body.append(overlay);
+    showEasterEggMessage('CAT MODE // MEOW!');
+    setTimeout(() => overlay.remove(), 4200);
+  }
+
+})();
+
+(() => {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
@@ -20,8 +149,8 @@ const activeCommentUnsubscribers = new Set();
   let mx = 0, my = 0, cx = 0, cy = 0;
   addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
   (function loop() { cx += (mx - cx) * .25; cy += (my - cy) * .25; cur.style.transform = `translate(${cx}px,${cy}px)`; requestAnimationFrame(loop); })();
-  document.addEventListener('mouseover', e => { if (e.target.closest('a,button,[data-tilt]')) cur.classList.add('hover'); });
-  document.addEventListener('mouseout', e => { if (e.target.closest('a,button,[data-tilt]')) cur.classList.remove('hover'); });
+  document.addEventListener('mouseover', e => { if (e.target.closest('a,button:not(.comment-avatar),[data-tilt]')) cur.classList.add('hover'); });
+  document.addEventListener('mouseout', e => { if (e.target.closest('a,button:not(.comment-avatar),[data-tilt]')) cur.classList.remove('hover'); });
 
   $('#year').textContent = new Date().getFullYear();
 
@@ -124,14 +253,16 @@ function createCommentElement(comment) {
   const item = document.createElement('li');
   item.className = 'post-comment';
 
-  const avatar = document.createElement('span');
+  const avatar = document.createElement('button');
+  avatar.type = 'button';
   const name = comment.username.trim();
   const emoticons = ['(=^.^=)', '(=^o^=)', '(=^-^=)', '(=^_^=)', '(=^w^=)', "(='.'=)", '(^._.^)', '(=^x^=)'];
   const nameHash = [...name.toLowerCase()].reduce((hash, char) => hash + char.charCodeAt(0), 0);
   const colorIndex = nameHash % 6;
   avatar.className = `comment-avatar avatar-tone-${colorIndex}`;
   avatar.textContent = emoticons[nameHash % emoticons.length];
-  avatar.setAttribute('aria-hidden', 'true');
+  avatar.setAttribute('aria-label', 'Start de kattenmodus');
+  avatar.title = 'Klik voor kattenmodus';
 
   const body = document.createElement('div');
   body.className = 'post-comment-body';
@@ -279,6 +410,10 @@ document.addEventListener('submit', event => {
   Promise.resolve(window.postCommentsReady).then(api => api.add(section.dataset.postId, username, text)).then(() => {
     form.reset();
     status.textContent = 'Je reactie is geplaatst.';
+    const normalizedUsername = username.toLocaleLowerCase('nl-BE');
+    if (normalizedUsername === 'emilia' || normalizedUsername === 'emilia toffoletto') {
+      document.dispatchEvent(new Event('emilia-comment'));
+    }
   }).catch(error => {
     status.textContent = `Je reactie kon niet worden opgeslagen: ${error.message}`;
     status.setAttribute('role', 'alert');
