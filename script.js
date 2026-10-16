@@ -54,19 +54,14 @@ const activeCommentUnsubscribers = new Set();
     dialog.className = 'emilia-video-dialog';
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', 'emilia-video-title');
+    dialog.setAttribute('aria-label', 'Videopopup');
 
-    const header = document.createElement('header');
-    const title = document.createElement('h2');
-    title.id = 'emilia-video-title';
-    title.textContent = 'SPECIALE GAST GESPOT';
     const close = document.createElement('button');
     close.className = 'emilia-video-close';
     close.type = 'button';
     close.dataset.closeVideo = '';
     close.setAttribute('aria-label', 'Sluit video');
     close.textContent = '×';
-    header.append(title, close);
 
     const frame = document.createElement('iframe');
     frame.src = 'https://www.youtube-nocookie.com/embed/yzIzRe0RJSk?autoplay=1&rel=0';
@@ -75,14 +70,7 @@ const activeCommentUnsubscribers = new Set();
     frame.allowFullscreen = true;
     frame.referrerPolicy = 'strict-origin-when-cross-origin';
 
-    const fallbackLink = document.createElement('a');
-    fallbackLink.className = 'emilia-video-link';
-    fallbackLink.href = 'https://www.youtube.com/shorts/yzIzRe0RJSk';
-    fallbackLink.target = '_blank';
-    fallbackLink.rel = 'noopener noreferrer';
-    fallbackLink.textContent = 'Problemen met afspelen? Bekijk de video op YouTube ↗';
-
-    dialog.append(header, frame, fallbackLink);
+    dialog.append(frame, close);
     overlay.append(dialog);
     document.body.append(overlay);
     close.focus();
