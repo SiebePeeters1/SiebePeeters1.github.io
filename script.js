@@ -32,6 +32,36 @@ const activeCommentUnsubscribers = new Set();
 
   document.addEventListener('emilia-comment', openEmiliaVideo);
   document.addEventListener('click', event => {
+    const control = event.target.closest('[data-carousel-action], [data-carousel-index]');
+    if (!control) return;
+
+    const carousel = control.closest('.week-carousel');
+    if (!carousel) return;
+    const thumbnails = [...carousel.querySelectorAll('[data-carousel-index]')];
+    const image = carousel.querySelector('.week-carousel-image');
+    const indexLabel = carousel.querySelector('.week-carousel-index');
+    const currentIndex = thumbnails.findIndex(button => button.classList.contains('active'));
+    if (!image || !indexLabel || !thumbnails.length || currentIndex < 0) return;
+
+    const direction = control.dataset.carouselAction === 'previous' ? -1 : 1;
+    const nextIndex = control.hasAttribute('data-carousel-index')
+      ? Number(control.dataset.carouselIndex)
+      : (currentIndex + direction + thumbnails.length) % thumbnails.length;
+    const nextThumbnail = thumbnails[nextIndex];
+    if (!nextThumbnail) return;
+
+    image.src = nextThumbnail.dataset.imageSrc;
+    image.alt = nextThumbnail.dataset.imageAlt;
+    indexLabel.textContent = `${String(nextIndex + 1).padStart(2, '0')} / ${String(thumbnails.length).padStart(2, '0')}`;
+    image.classList.add('changing');
+    requestAnimationFrame(() => requestAnimationFrame(() => image.classList.remove('changing')));
+    thumbnails.forEach((thumbnail, index) => {
+      const active = index === nextIndex;
+      thumbnail.classList.toggle('active', active);
+      thumbnail.setAttribute('aria-pressed', String(active));
+    });
+  });
+  document.addEventListener('click', event => {
     const closeButton = event.target.closest('[data-close-video]');
     const dialog = document.querySelector('.emilia-video-overlay');
     if (!dialog) return;
@@ -181,6 +211,15 @@ const activeCommentUnsubscribers = new Set();
 
     const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); } }), { threshold: .15 });
     $$('.rev').forEach(el => io.observe(el));
+    if (location.hash === '#/blog') {
+      const latestWeek = $('#wpl1-week-03');
+      if (latestWeek?.classList.contains('open')) {
+        window.scrollTo({
+          top: latestWeek.getBoundingClientRect().top + window.scrollY - 120,
+          behavior: 'instant'
+        });
+      }
+    }
 
     $$('.sk-list li').forEach(li => io.observe(li));
 
