@@ -3,7 +3,9 @@ const activeCommentUnsubscribers = new Set();
 
 (() => {
   const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+  const emiliaCode = 'emilia';
   let keyProgress = 0;
+  let emiliaProgress = 0;
   let konamiTimer;
 
   document.addEventListener('keydown', event => {
@@ -11,6 +13,19 @@ const activeCommentUnsubscribers = new Set();
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) return;
 
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (!document.querySelector('.mini-game-overlay') && key.length === 1 && key === emiliaCode[emiliaProgress]) {
+      emiliaProgress += 1;
+    } else {
+      emiliaProgress = key === emiliaCode[0] ? 1 : 0;
+    }
+
+    if (emiliaProgress === emiliaCode.length) {
+      emiliaProgress = 0;
+      openMiniGame();
+      showEasterEggMessage('EMILIA MODE // CAT RUNNER');
+      return;
+    }
+
     if (key === konamiCode[keyProgress]) {
       keyProgress += 1;
     } else {
@@ -30,7 +45,40 @@ const activeCommentUnsubscribers = new Set();
     startCatMode();
   });
 
-  document.addEventListener('emilia-comment', openEmiliaVideo);
+  let gameFrame;
+  let runnerState;
+
+  document.addEventListener('click', event => {
+    const closeButton = event.target.closest('[data-close-game]');
+    const gameOverlay = document.querySelector('.mini-game-overlay');
+    if (gameOverlay && (closeButton || event.target === gameOverlay)) closeMiniGame(gameOverlay);
+
+    if (event.target.closest('[data-runner-jump]') && gameOverlay) jumpCatRunner();
+    if (event.target.closest('[data-runner-restart]') && gameOverlay) resetCatRunner(gameOverlay);
+  });
+
+  document.addEventListener('keydown', event => {
+    const overlay = document.querySelector('.mini-game-overlay');
+    if (!overlay) return;
+    if (event.key === 'Escape') {
+      closeMiniGame(overlay);
+      return;
+    }
+    if (event.key.startsWith('Arrow')) event.preventDefault();
+    if (event.key === 'ArrowDown') {
+      if (runnerState?.running && runnerState.catY === 205) runnerState.crouching = true;
+      return;
+    }
+    if (event.key !== ' ' && event.key !== 'ArrowUp') return;
+    if (event.key === ' ' && event.target instanceof HTMLElement && event.target.closest('button')) return;
+    event.preventDefault();
+    jumpCatRunner();
+  });
+  document.addEventListener('keyup', event => {
+    if (event.key === 'ArrowDown' && runnerState) runnerState.crouching = false;
+  });
+
+  document.addEventListener('emilia-comment', openMiniGame);
   document.addEventListener('click', event => {
     const control = event.target.closest('[data-carousel-action], [data-carousel-index]');
     if (!control) return;
@@ -61,53 +109,197 @@ const activeCommentUnsubscribers = new Set();
       thumbnail.setAttribute('aria-pressed', String(active));
     });
   });
-  document.addEventListener('click', event => {
-    const closeButton = event.target.closest('[data-close-video]');
-    const dialog = document.querySelector('.emilia-video-overlay');
-    if (!dialog) return;
-    if (closeButton || event.target === dialog) closeEmiliaVideo(dialog);
-  });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') {
-      const dialog = document.querySelector('.emilia-video-overlay');
-      if (dialog) closeEmiliaVideo(dialog);
-    }
-  });
+  function openMiniGame() {
+    document.querySelector('.mini-game-overlay')?.remove();
+    cancelAnimationFrame(gameFrame);
 
-  function openEmiliaVideo() {
-    document.querySelector('.emilia-video-overlay')?.remove();
     const overlay = document.createElement('div');
-    overlay.className = 'emilia-video-overlay';
-    overlay.setAttribute('role', 'presentation');
-
+    overlay.className = 'mini-game-overlay';
     const dialog = document.createElement('section');
-    dialog.className = 'emilia-video-dialog';
+    dialog.className = 'mini-game-dialog';
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-label', 'Videopopup');
+    dialog.setAttribute('aria-labelledby', 'mini-game-title');
 
+    const heading = document.createElement('header');
+    heading.className = 'mini-game-heading';
+    const title = document.createElement('h2');
+    title.id = 'mini-game-title';
+    title.textContent = 'ASCII CAT RUNNER';
     const close = document.createElement('button');
-    close.className = 'emilia-video-close';
     close.type = 'button';
-    close.dataset.closeVideo = '';
-    close.setAttribute('aria-label', 'Sluit video');
+    close.className = 'mini-game-close';
+    close.dataset.closeGame = '';
+    close.setAttribute('aria-label', 'Sluit minigame');
     close.textContent = '×';
+    heading.append(title, close);
 
-    const frame = document.createElement('iframe');
-    frame.src = 'https://www.youtube-nocookie.com/embed/yzIzRe0RJSk?autoplay=1&rel=0';
-    frame.title = 'YouTube-video voor Emilia';
-    frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
-    frame.allowFullscreen = true;
-    frame.referrerPolicy = 'strict-origin-when-cross-origin';
-
-    dialog.append(frame, close);
+    const content = document.createElement('div');
+    content.className = 'mini-game-content';
+    dialog.append(heading, content);
     overlay.append(dialog);
     document.body.append(overlay);
-    close.focus();
+
+    startCatRunner(content);
+    content.querySelector('[data-runner-jump]').focus();
   }
 
-  function closeEmiliaVideo(overlay) {
+  function closeMiniGame(overlay) {
+    cancelAnimationFrame(gameFrame);
+    runnerState = null;
     overlay.remove();
+  }
+
+   function startCatRunner(content) {
+     content.innerHTML = '<div class="runner-score"><span>REN, KATJE, REN</span><span>SCORE <b data-runner-score>00000</b></span><span>SNELHEID <b data-runner-speed>260</b></span></div><p class="mini-game-instruction">Spring over de kleine ASCII-roosjes. Houd ↓ ingedrukt om onder de vliegende bijtjes door te duiken.</p><canvas class="runner-canvas" width="720" height="250" data-runner-canvas role="img" aria-label="Een klein ASCII-katje rent door een veld. Spring over roosjes en duik onder vliegende bijtjes."></canvas><div class="runner-controls"><span class="mini-game-status" data-runner-status role="status" aria-live="polite">Spatie / ↑ springen · houd ↓ ingedrukt om te duiken.</span><button type="button" data-runner-restart hidden>OPNIEUW</button><button type="button" class="runner-duck" data-runner-duck>DUIK ↓</button><button type="button" class="runner-jump" data-runner-jump>SPRING ↑</button></div>';
+    const overlay = content.closest('.mini-game-overlay');
+    const canvas = content.querySelector('[data-runner-canvas]');
+    canvas.addEventListener('pointerdown', jumpCatRunner);
+    const duckButton = content.querySelector('[data-runner-duck]');
+    duckButton.addEventListener('pointerdown', () => { if (runnerState?.running && runnerState.catY === 205) runnerState.crouching = true; });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(type => duckButton.addEventListener(type, () => { if (runnerState) runnerState.crouching = false; }));
+    resetCatRunner(overlay);
+  }
+
+  function resetCatRunner(overlay) {
+    const canvas = overlay.querySelector('[data-runner-canvas]');
+    if (!canvas) return;
+    cancelAnimationFrame(gameFrame);
+    runnerState = { score: 0, catY: 205, velocityY: 0, obstacleX: 760, obstacleType: 'flower', speed: 260, running: true, crouching: false, lastTime: 0 };
+    overlay.querySelector('[data-runner-score]').textContent = '00000';
+    overlay.querySelector('[data-runner-speed]').textContent = String(Math.round(runnerState.speed));
+    overlay.querySelector('[data-runner-status]').textContent = 'Klaar voor de start, miauw!';
+    overlay.querySelector('[data-runner-restart]').hidden = true;
+    drawCatRunner(canvas);
+    gameFrame = requestAnimationFrame(timestamp => tickCatRunner(timestamp, overlay));
+  }
+
+  function jumpCatRunner() {
+    if (!runnerState?.running || runnerState.catY < 205) return;
+    runnerState.crouching = false;
+    runnerState.velocityY = -540;
+  }
+
+  function tickCatRunner(timestamp, overlay) {
+    if (!runnerState?.running || !overlay.isConnected) return;
+    const canvas = overlay.querySelector('[data-runner-canvas]');
+    if (!canvas) return;
+    const state = runnerState;
+    const delta = state.lastTime ? Math.min((timestamp - state.lastTime) / 1000, .04) : 0;
+    state.lastTime = timestamp;
+    state.score += delta * 10;
+    state.speed = 260 + state.score * 1.5;
+    state.obstacleX -= state.speed * delta;
+    if (state.obstacleX < -70) {
+      state.obstacleX = 720 + Math.max(230, 380 - state.score * 1.2) + Math.random() * 220;
+      state.obstacleType = Math.random() < .68 ? 'flower' : 'bee';
+    }
+    state.velocityY += 1500 * delta;
+    state.catY = Math.min(205, state.catY + state.velocityY * delta);
+    if (state.catY === 205) state.velocityY = 0;
+
+    const catBounds = state.crouching
+      ? { left: 78, right: 118, top: state.catY - 19, bottom: state.catY - 2 }
+      : { left: 74, right: 124, top: state.catY - 39, bottom: state.catY - 5 };
+    const obstacleBounds = state.obstacleType === 'flower'
+      ? { left: state.obstacleX + 8, right: state.obstacleX + 48, top: 159, bottom: 202 }
+      : { left: state.obstacleX + 8, right: state.obstacleX + 62, top: 128, bottom: 165 };
+    if (catBounds.left < obstacleBounds.right && catBounds.right > obstacleBounds.left && catBounds.top < obstacleBounds.bottom && catBounds.bottom > obstacleBounds.top) {
+      state.running = false;
+      state.crouching = false;
+      overlay.querySelector('[data-runner-status]').textContent = `AU! Einde van de rit — score ${String(Math.floor(state.score)).padStart(5, '0')}.`;
+      overlay.querySelector('[data-runner-restart]').hidden = false;
+    }
+
+    overlay.querySelector('[data-runner-score]').textContent = String(Math.floor(state.score)).padStart(5, '0');
+    overlay.querySelector('[data-runner-speed]').textContent = String(Math.round(state.speed));
+    drawCatRunner(canvas);
+    if (state.running) gameFrame = requestAnimationFrame(nextTimestamp => tickCatRunner(nextTimestamp, overlay));
+  }
+
+  function drawCatRunner(canvas) {
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const style = getComputedStyle(document.documentElement);
+    const background = style.getPropertyValue('--paper').trim();
+    const ink = style.getPropertyValue('--ink').trim();
+    const accent = style.getPropertyValue('--accent').trim();
+    const state = runnerState;
+    const groundY = 205;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = background;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = 'rgba(10,10,10,.08)';
+    context.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 24) {
+      context.beginPath();
+      context.moveTo(x, 16);
+      context.lineTo(x, groundY);
+      context.stroke();
+    }
+    context.fillStyle = `${accent}22`;
+    context.beginPath();
+    context.arc(610, 56, 23, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = accent;
+    context.font = '12px "JetBrains Mono", monospace';
+    context.fillText('✳', 603, 60);
+    context.fillStyle = `${accent}14`;
+    context.beginPath();
+    context.moveTo(0, 174);
+    context.quadraticCurveTo(170, 116, 340, 174);
+    context.quadraticCurveTo(520, 132, 720, 166);
+    context.lineTo(720, groundY);
+    context.lineTo(0, groundY);
+    context.fill();
+    context.strokeStyle = ink;
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(0, groundY);
+    context.lineTo(canvas.width, groundY);
+    context.stroke();
+
+    const catY = state?.catY ?? groundY;
+    context.fillStyle = accent;
+    context.font = 'bold 12px "JetBrains Mono", monospace';
+    const catStep = Math.floor((state?.score ?? 0) * 2) % 2;
+    const catLines = state?.crouching && catY === groundY
+      ? ['( o.o )', '(_/ \\_)']
+      : [
+          ' /\\_/\\\\',
+          '( o.o )',
+          ' /|= =|\\',
+          catStep ? '(_/   \\_)' : '(_\\   /_)'
+        ];
+    const catTop = catY - (state?.crouching && catY === groundY ? 23 : 41);
+    catLines.forEach((line, index) => context.fillText(line, 58, catTop + index * 12));
+
+    context.font = 'bold 13px "JetBrains Mono", monospace';
+    if (state?.obstacleType === 'bee') {
+      context.fillStyle = style.getPropertyValue('--accent-2').trim();
+      context.fillText('  \\/ \\/', state.obstacleX, 133);
+      context.fillStyle = accent;
+      context.fillText('<(o)==', state.obstacleX, 149);
+      context.fillStyle = ink;
+      context.fillText('  / \\', state.obstacleX + 8, 163);
+    } else {
+      const flowerX = state?.obstacleX ?? 760;
+      context.fillStyle = accent;
+      context.fillText('(@@@)', flowerX, 174);
+      context.fillText(' \\|/ ', flowerX, 186);
+      context.fillStyle = style.getPropertyValue('--accent-2').trim();
+      context.fillText('  |  ', flowerX, 198);
+    }
+
+    const groundOffset = state ? Math.floor(state.score * 4) % 24 : 0;
+    context.strokeStyle = 'rgba(10,10,10,.45)';
+    context.lineWidth = 2;
+    for (let x = -24 + groundOffset; x < canvas.width; x += 24) {
+      context.beginPath();
+      context.moveTo(x, groundY + 12);
+      context.lineTo(x + 10, groundY + 12);
+      context.stroke();
+    }
   }
 
   function showEasterEggMessage(message) {
