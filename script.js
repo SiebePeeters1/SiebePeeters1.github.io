@@ -404,7 +404,7 @@ const activeCommentUnsubscribers = new Set();
     const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); } }), { threshold: .15 });
     $$('.rev').forEach(el => io.observe(el));
     if (location.hash === '#/blog') {
-      const latestWeek = $('#wpl1-week-05');
+      const latestWeek = $('#wpl1-week-06');
       if (latestWeek?.classList.contains('open')) {
         window.scrollTo({
           top: latestWeek.getBoundingClientRect().top + window.scrollY - 120,
